@@ -21,7 +21,7 @@ version: 2.0.3
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "3.2.1"
+appVersion: "latest"
 
 
 icon: "https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png"
