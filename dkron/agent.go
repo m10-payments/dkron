@@ -204,6 +204,7 @@ func (a *Agent) Start() error {
 	}
 	a.listener = l
 
+	a.serverLookup = NewServerLookup()
 	if a.config.Server {
 		a.StartServer()
 	} else {
@@ -553,7 +554,6 @@ func (a *Agent) SetConfig(c *Config) {
 
 // StartServer launch a new dkron server process
 func (a *Agent) StartServer() {
-	a.serverLookup = NewServerLookup()
 	if a.Store == nil {
 		s, err := NewStore(a.logger)
 		if err != nil {
