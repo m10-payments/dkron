@@ -18,6 +18,8 @@ jobs:
 
       - name: Prepare
         id: prepare
+        env:
+          TAG: ${{ github.event.inputs.TAG }}
         run: |
             TAG=${{ github.event.inputs.version }}
             echo ::set-output name=tag_name::${TAG}
