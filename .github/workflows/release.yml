@@ -19,10 +19,9 @@ jobs:
       - name: Prepare
         id: prepare
         env:
-          TAG: ${{ github.event.inputs.TAG }}
+          TAG: latest
         run: |
-            TAG=${{ github.event.inputs.version }}
-            echo ::set-output name=tag_name::${TAG}
+            echo ::set-output name=tag_name::latest
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
