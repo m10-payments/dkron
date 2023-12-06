@@ -1,16 +1,19 @@
 package dkron
 
 import (
-	"strings"
-
 	"github.com/hashicorp/raft"
 	"github.com/hashicorp/serf/serf"
+	"strings"
+	"time"
 )
 
 const (
 	// StatusReap is used to update the status of a node if we
 	// are handling a EventMemberReap
 	StatusReap = serf.MemberStatus(-1)
+
+	// maxPeerRetries limits how many invalidate attempts are made
+	maxPeerRetries = 6
 )
 
 // nodeJoin is used to handle join events on the serf cluster
@@ -111,16 +114,58 @@ func (a *Agent) maybeBootstrap() {
 	}
 
 	// TODO: Query each of the servers and make sure they report no Raft peers.
+	// Query each of the servers and make sure they report no Raft peers.
+	for _, server := range servers {
+		var peers []string
+
+		// Retry with exponential backoff to get peer status from this server
+		for attempt := uint(0); attempt < maxPeerRetries; attempt++ {
+			configuration, err := a.GRPCClient.RaftGetConfiguration(server.RPCAddr.String())
+			if err != nil {
+				nextRetry := (1 << attempt) * time.Second
+				a.logger.Error("Failed to confirm peer status for server (will retry).",
+					"server", server.Name,
+					"retry_interval", nextRetry.String(),
+					"error", err,
+				)
+				time.Sleep(nextRetry)
+			} else {
+				for _, peer := range configuration.Servers {
+					peers = append(peers, peer.Id)
+				}
+				break
+			}
+		}
+
+		// Found a node with some Raft peers, stop bootstrap since there's
+		// evidence of an existing cluster. We should get folded in by the
+		// existing servers if that's the case, so it's cleaner to sit as a
+		// candidate with no peers so we don't cause spurious elections.
+		// It's OK this is racy, because even with an initial bootstrap
+		// as long as one peer runs bootstrap things will work, and if we
+		// have multiple peers bootstrap in the same way, that's OK. We
+		// just don't want a server added much later to do a live bootstrap
+		// and interfere with the cluster. This isn't required for Raft's
+		// correctness because no server in the existing cluster will vote
+		// for this server, but it makes things much more stable.
+		if len(peers) > 0 {
+			a.logger.Info("Existing Raft peers reported by server, disabling bootstrap mode", "server", server.Name)
+			a.config.BootstrapExpect = 0
+			return
+		}
+	}
 
 	// Update the peer set
 	// Attempt a live bootstrap!
 	var configuration raft.Configuration
 	var addrs []string
+	var ids []string
 
 	for _, server := range servers {
 		addr := server.Addr.String()
 		addrs = append(addrs, addr)
 		id := raft.ServerID(server.ID)
+		ids = append(ids, server.ID)
 		suffrage := raft.Voter
 		peer := raft.Server{
 			ID:       id,
@@ -130,7 +175,7 @@ func (a *Agent) maybeBootstrap() {
 		configuration.Servers = append(configuration.Servers, peer)
 	}
 	a.logger.Info("agent: found expected number of peers, attempting to bootstrap cluster...",
-		"peers", strings.Join(addrs, ","))
+		"peersAddrs", strings.Join(addrs, ","), "peersIDs", ";", strings.Join(ids, ","))
 	future := a.raft.BootstrapCluster(configuration)
 	if err := future.Error(); err != nil {
 		a.logger.WithError(err).Error("agent: failed to bootstrap cluster")

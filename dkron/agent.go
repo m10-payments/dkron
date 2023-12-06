@@ -36,6 +36,10 @@ const (
 	// This is used to reduce disk I/O for the recently committed entries.
 	raftLogCacheSize = 512
 	minRaftProtocol  = 3
+
+	// raftRemoveGracePeriod is how long we wait to allow a RemovePeer
+	// to replicate to gracefully leave the cluster.
+	raftRemoveGracePeriod = 5 * time.Second
 )
 
 var (
@@ -263,25 +267,101 @@ func (a *Agent) JoinLAN(addrs []string) (int, error) {
 func (a *Agent) Stop() error {
 	a.logger.Info("agent: Called member stop, now stopping")
 
-	if a.config.Server {
-		if a.sched.Started() {
-			<-a.sched.Stop().Done()
-		}
+	// Check the number of known peers
+	configFuture := a.raft.GetConfiguration()
+	if err := configFuture.Error(); err != nil {
+		return err
+	}
+	cfg := configFuture.Configuration()
 
-		// TODO: Check why Shutdown().Error() is not working
-		_ = a.raft.Shutdown()
-
-		if err := a.Store.Shutdown(); err != nil {
-			return err
+	var numPeers int
+	for _, server := range cfg.Servers {
+		if server.Suffrage == raft.Voter {
+			numPeers++
 		}
 	}
 
-	if err := a.serf.Leave(); err != nil {
-		return err
+	addr := a.raftTransport.LocalAddr()
+
+	// If we are the current leader, and we have any other peers (cluster has multiple
+	// servers), we should do a RemoveServer/RemovePeer to safely reduce the quorum size.
+	// If we are not the leader, then we should issue our leave intention and wait to be
+	// removed for some reasonable period of time.
+	isLeader := a.IsLeader()
+	if isLeader && numPeers > 1 {
+		if err := a.leadershipTransfer(); err == nil {
+			isLeader = false
+			if a.sched.Started() {
+				<-a.sched.Stop().Done()
+			}
+		} else {
+			future := a.raft.RemoveServer(raft.ServerID(a.config.NodeName), 0, 0)
+			if err := future.Error(); err != nil {
+				a.logger.Error("failed to remove ourself as raft peer", "error", err)
+			}
+		}
 	}
 
-	if err := a.serf.Shutdown(); err != nil {
-		return err
+	// Leave the LAN pool
+	if a.serf != nil {
+		if err := a.serf.Leave(); err != nil {
+			a.logger.Error("failed to leave LAN Serf cluster", "error", err)
+		}
+	}
+
+	// Start refusing RPCs now that we've left the LAN pool. It's important
+	// to do this *after* we've left the LAN pool so that clients will know
+	// to shift onto another server if they perform a retry. We also wake up
+	// all queries in the RPC retry state.
+	a.logger.Info("Waiting to drain RPC traffic", "drain_time", time.Second*10)
+	close(a.shutdownCh)
+	time.Sleep(time.Second * 10) // todo cfg on start
+
+	// If we were not leader, wait to be safely removed from the cluster. We
+	// must wait to allow the raft replication to take place, otherwise an
+	// immediate shutdown could cause a loss of quorum.
+	if !isLeader {
+		left := false
+		limit := time.Now().Add(raftRemoveGracePeriod)
+		for !left && time.Now().Before(limit) {
+			// Sleep a while before we check.
+			time.Sleep(50 * time.Millisecond)
+
+			// Get the latest configuration.
+			future := a.raft.GetConfiguration()
+			if err := future.Error(); err != nil {
+				a.logger.Error("failed to get raft configuration", "error", err)
+				break
+			}
+
+			// See if we are no longer included.
+			left = true
+			for _, server := range future.Configuration().Servers {
+				if server.Address == addr {
+					left = false
+					break
+				}
+			}
+		}
+
+		// TODO (slackpad) With the old Raft library we used to force the
+		// peers set to empty when a graceful leave occurred. This would
+		// keep voting spam down if the server was restarted, but it was
+		// dangerous because the peers was inconsistent with the logs and
+		// snapshots, so it wasn't really safe in all cases for the server
+		// to become leader. This is now safe, but the log spam is noisy.
+		// The next new version of the library will have a "you are not a
+		// peer stop it" behavior that should address this. We will have
+		// to evaluate during the RC period if this interim situation is
+		// not too confusing for operators.
+
+		// TODO (slackpad) When we take a later new version of the Raft
+		// library it won't try to complete replication, so this peer
+		// may not realize that it has been removed. Need to revisit this
+		// and the warning here.
+		if !left {
+			a.logger.Warn("failed to leave raft configuration gracefully, timeout")
+		}
 	}
 
 	return nil
@@ -719,14 +799,16 @@ func (a *Agent) eventLoop() {
 				case serf.EventMemberJoin:
 					a.nodeJoin(me)
 					a.localMemberEvent(me)
-				case serf.EventMemberLeave, serf.EventMemberFailed:
+				case serf.EventMemberLeave, serf.EventMemberFailed, serf.EventMemberReap:
 					a.nodeFailed(me)
-					a.localMemberEvent(me)
-				case serf.EventMemberReap:
 					a.localMemberEvent(me)
 				case serf.EventMemberUpdate:
 					a.logger.WithField("event", e.String()).Info("agent: event member update")
-				case serf.EventUser, serf.EventQuery: // Ignore
+					a.nodeJoin(me)
+					a.localMemberEvent(me)
+				case serf.EventUser:
+					a.localMemberEvent(me)
+				case serf.EventQuery: // Ignore
 				default:
 					a.logger.WithField("event", e.String()).Warn("agent: Unhandled serf event")
 				}
