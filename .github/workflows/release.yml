@@ -3,8 +3,8 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: Version (e.g., 1.0.0)
+      TAG:
+        description: TAG (e.g., 1.0.0)
         required: true
 
 jobs:
@@ -18,10 +18,8 @@ jobs:
 
       - name: Prepare
         id: prepare
-        env:
-          VERSION: ${{ github.event.inputs.version }}
         run: |
-            TAG=${VERSION}
+            TAG=${{ github.event.inputs.version }}
             echo ::set-output name=tag_name::${TAG}
 
       - name: Set up QEMU
