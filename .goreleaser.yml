@@ -11,14 +11,14 @@ builds:
     env:
       - CGO_ENABLED=0
     goos:
-      - freebsd
-      - windows
+      #- freebsd
+      #- windows
       - darwin
       - linux
     goarch:
       - amd64
-      - arm64
-      - arm
+      #- arm64
+      #- arm
     goarm:
       - '7'
     ldflags:
@@ -119,7 +119,7 @@ snapshot:
 
 dockers:
   - image_templates:
-      - dkron/{{ .ProjectName }}:{{ .Version }}-amd64
+      - ghcr.io/m10-payments/{{ .ProjectName }}:{{ .Version }}-amd64
     dockerfile: Dockerfile.release
     use: buildx
     goos: linux
@@ -140,39 +140,39 @@ dockers:
     build_flag_templates:
       - --platform=linux/amd64
 
-  - image_templates:
-      - dkron/{{ .ProjectName }}:{{ .Version }}-arm64
-    dockerfile: Dockerfile.release
-    use: buildx
-    goos: linux
-    goarch: arm64
-    ids: *docker-ids
-    build_flag_templates:
-      - --platform=linux/arm64/v8
+  #- image_templates:
+  #    - ghcr.io/m10-payments/{{ .ProjectName }}:{{ .Version }}-arm64
+  #  dockerfile: Dockerfile.release
+  #  use: buildx
+  #  goos: linux
+  #  goarch: arm64
+  #  ids: *docker-ids
+  #  build_flag_templates:
+  #    - --platform=linux/arm64/v8
 
-  - image_templates:
-      - dkron/{{ .ProjectName }}:{{ .Version }}-armv7
-    dockerfile: Dockerfile.release
-    use: buildx
-    goos: linux
-    goarch: arm
-    goarm: '7'
-    ids: *docker-ids
-    build_flag_templates:
-      - --platform=linux/arm/v7
+  #- image_templates:
+  #    - ghcr.io/m10-payments/{{ .ProjectName }}:{{ .Version }}-armv7
+  #  dockerfile: Dockerfile.release
+  #  use: buildx
+  #  goos: linux
+  #  goarch: arm
+  #  goarm: '7'
+  #  ids: *docker-ids
+  #  build_flag_templates:
+  #    - --platform=linux/arm/v7
 
 docker_manifests:
-  - name_template: dkron/{{ .ProjectName }}:{{ .Version }}
+  - name_template: ghcr.io/m10-payments/{{ .ProjectName }}:{{ .Version }}
     image_templates:
-      - dkron/{{ .ProjectName }}:{{ .Version }}-amd64
-      - dkron/{{ .ProjectName }}:{{ .Version }}-arm64
-      - dkron/{{ .ProjectName }}:{{ .Version }}-armv7
+      - ghcr.io/m10-payments/{{ .ProjectName }}:{{ .Version }}-amd64
+      #- dkron/{{ .ProjectName }}:{{ .Version }}-arm64
+      #- dkron/{{ .ProjectName }}:{{ .Version }}-armv7
 
-  - name_template: dkron/{{ .ProjectName }}:latest
+  - name_template: ghcr.io/m10-payments/{{ .ProjectName }}:latest
     image_templates:
-    - dkron/{{ .ProjectName }}:{{ .Version }}-amd64
-    - dkron/{{ .ProjectName }}:{{ .Version }}-arm64
-    - dkron/{{ .ProjectName }}:{{ .Version }}-armv7
+    - ghcr.io/m10-payments/{{ .ProjectName }}:{{ .Version }}-amd64
+    #- dkron/{{ .ProjectName }}:{{ .Version }}-arm64
+    #- dkron/{{ .ProjectName }}:{{ .Version }}-armv7
 
 changelog:
   sort: asc

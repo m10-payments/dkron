@@ -4,7 +4,7 @@ fury: $(LINUX_PKGS)
 $(LINUX_PKGS):
 	fury push --as distribworks $@
 
-PACKAGE_NAME          := github.com/distribworks/dkron
+PACKAGE_NAME          := ghcr.io/m10-payments/dkron
 GOLANG_CROSS_VERSION  ?= v1.21.5
 
 .PHONY: release-dry-run
@@ -15,6 +15,7 @@ release-dry-run:
 		-v ${PWD}:/dkron \
 		-w /dkron \
 		-e GITHUB_TOKEN \
+		-e VERSION=${VERSION} \
 		-e DOCKER_USERNAME \
 		-e DOCKER_PASSWORD \
 		-e DOCKER_REGISTRY \
@@ -32,14 +33,14 @@ release:
 		-v ${PWD}:/dkron \
 		-w /dkron \
 		-e GITHUB_TOKEN \
+		-e VERSION=${VERSION} \
 		-e DOCKER_USERNAME \
 		-e DOCKER_PASSWORD \
 		-e DOCKER_REGISTRY \
+		-e GORELEASER_CURRENT_TAG=v3.2.7-M1 \
 		-v /var/run/docker.sock:/var/run/docker.sock \
-		-v `pwd`:/go/src/$(PACKAGE_NAME) \
-		-w /go/src/$(PACKAGE_NAME) \
 		goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
-		--rm-dist --skip-validate --timeout=1h
+		release --rm-dist --skip-validate --timeout=1h
 
 .PHONY: clean
 clean:

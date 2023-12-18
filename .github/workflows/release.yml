@@ -31,4 +31,5 @@ jobs:
             make release
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN_WRITE_PACKAGES }}
-          VERSION: ${{ steps.prepare.outputs.tag_name }}
+          VERSION: latest
+          TAG: latest
