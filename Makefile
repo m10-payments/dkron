@@ -37,7 +37,7 @@ release:
 		-e DOCKER_USERNAME \
 		-e DOCKER_PASSWORD \
 		-e DOCKER_REGISTRY \
-		-e GORELEASER_CURRENT_TAG=v3.2.7-M2 \
+		-e GORELEASER_CURRENT_TAG=v3.2.7-M3 \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
 		release --rm-dist --skip-validate --timeout=1h
